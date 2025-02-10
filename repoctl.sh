@@ -6,6 +6,7 @@ VERSION=0.02
 
 # Download progress
 progress=0
+
 ##########################################USAGE########################################
 
 # Usage messages
