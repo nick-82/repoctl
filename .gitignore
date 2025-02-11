@@ -1,4 +1,6 @@
 repos/
+push_diffs/
+pull_diffs/
 .*
 *.log
 !.gitignore

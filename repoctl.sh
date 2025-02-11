@@ -211,8 +211,8 @@ parse_manifest_sed() {
 # $2 - CSV packages file path 
 parse_manifest_awk() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
-  head -n30 "${1%.*}" \
-  | tail -n20 \
+  head -n50 "${1%.*}" \
+  | tail -n25 \
   | awk 'BEGIN {OFS=";"} {
       if(match($0,/"name"[^"]*"[^"]*"/)) {name=substr($0,RSTART,RLENGTH);if(match(name,/:[^"]*"[^"]*"/)){name=substr(name,RSTART+2,RLENGTH-3)}}
       if(match($0,/"version"[^"]*"[^"]*"/)) {version=substr($0,RSTART,RLENGTH);if(match(version,/:[^"]*"[^"]*"/)){version=substr(version,RSTART+2,RLENGTH-3)}}
@@ -239,6 +239,15 @@ check_repos_path() {
   [ -w "$REPOS_DIR" ] || exit_error "$REPOS_DIR not write directory mode" "$ERROR_FILE_MODE"
 }
 
+check_push_diffs_path() {
+  [ -d "$PUSH_DIFFS_DIR" ] || exit_error "$PUSH_DIFFS_DIR not exist" "$NOT_EXIST"
+  [ -w "$PUSH_DIFFS_DIR" ] || exit_error "$PUSH_DIFFS_DIR not write directory mode" "$ERROR_FILE_MODE"
+}
+
+check_pull_diffs_path() {
+  [ -d "$PULL_DIFFS_DIR" ] || exit_error "$PULL_DIFFS_DIR not exist" "$NOT_EXIST"
+  [ -w "$PULL_DIFFS_DIR" ] || exit_error "$PULL_DIFFS_DIR not write directory mode" "$ERROR_FILE_MODE"
+}
 # Remote repo list
 repo_remote_list() {
   fetch -qo - "$REMOTE_REPOS_URL" \
@@ -337,7 +346,7 @@ fetch_service_files() {
 # $2 - repo name + branch
 copy_service_files() {
   for file in $(printf "%s" "$META_FILES,$PACKAGESITE_FILES,$DATA_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}') ; do
-    cp -fp "$1/$file" "$2" 2>/dev/null
+    [ -f "$1/$file" ] && cp -fp "$1/$file" "$2"
   done
 }
 
@@ -350,6 +359,13 @@ EOF
 
 COUNT_EXEC=$(cat <<-'EOF'
   echo $(( $(tail -n1 .counter ) - 1 )) >.counter
+EOF
+)
+
+COPY_EXEC=$(cat <<-'EOF'
+  local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
+  [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
+  cp -fpR "$1/$0" "$2/$0"
 EOF
 )
 
@@ -396,11 +412,15 @@ parse_options() {
   #[ "$#" -eq "0" ] && usage "$1"
   COMMAND="$1" && shift
   OPTIND=1
-  while getopts :V:A:B:hsa OPT; do
+  while getopts :V:A:B:n:hsa OPT; do
     case "$OPT" in
       h) usage "$COMMAND" ;;
       s) SILENT=SILENT ;; 
       a) CHOICE=ALL ;; 
+      n) case "$COMMAND" in
+          'push'|'pull') COUNT="${OPTARG:-1}" ;;
+          *) exit_error "unknown option -$OPT for command $COMMAND" "$UNKNOWN_OPTION" ;;
+          esac ;;
       V) case "$COMMAND" in
           'init'|'remove'|'info'|'remote-info'|'check'| \
           'remote-check'|'clone'|'update'|'push'|'pull') REPO_VERSION="$OPTARG" ;;
@@ -520,7 +540,7 @@ update_repo_handler() {
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
 
   if [ -n "${REPO_BRANCHES}" ] ; then 
-    branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
+    branches="$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')"
 
     for branch in $branches ; do
       repo_branch_name="FreeBSD:$REPO_VERSION:$REPO_ARCH/$branch"
@@ -532,7 +552,7 @@ update_repo_handler() {
         last_diff_dir="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort | tail -n1)"
 
         if [ -z "$last_diff_dir" ] ; then 
-          start_timestamp=$(cat "$repo_branch_dir/$DIFFS_DIR/.$DIFFS_DIR.init") \
+          start_timestamp="$(cat "$repo_branch_dir/$DIFFS_DIR/.$DIFFS_DIR.init")" \
           && mkdir -p "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.$start_timestamp.$current_timestamp"
         else
           mkdir -p "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.${last_diff_dir##*.}.$current_timestamp"
@@ -549,11 +569,30 @@ update_repo_handler() {
 # Push diffs from local repository to private network command handler
 push_repo_handler() {
   parse_options "$@"
-  while : ; do
-    sleep 1
-  done &
-  printf "push handler\n"
-  printf "params %s\n" "$@"
+  [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
+  [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
+
+  if [ -n "${REPO_BRANCHES}" ] ; then 
+    branches="$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')"
+
+    for branch in $branches ; do
+      repo_branch_name="FreeBSD:$REPO_VERSION:$REPO_ARCH/$branch"
+      repo_branch_dir="$REPOS_DIR/$repo_branch_name"
+
+      if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
+        last_diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort | tail -n"$COUNT")"
+        for dir in $last_diff_dirs ; do
+          push_dir="$PUSH_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:${dir##*/}"
+          mkdir -p "$push_dir/packages"
+          cp -fp "$dir/"* "$push_dir"
+          #[ -f "$dir/$DIFF_DIR.csv" ] && echo "$dir/$DIFF_DIR.csv" 
+          cut -wf2 "$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+          | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" 
+          #| xargs -n1 -P"$THREADS" -I% cp -fpR "$repo_branch_dir/"% "$push_dir/packages/"%
+        done
+      fi
+    done
+  fi
 }
 
 # Pull diffs to private network command handler
@@ -590,6 +629,8 @@ set -o errexit
 check_utility date getopts tar fetch mkdir comm logger tee printf awk sed tail head rm sort xargs pgrep cut trap nproc
 load_conf
 check_repos_path
+[ "$MODE" = "PUBLIC" ] && check_push_diffs_path
+[ "$MODE" = "PRIVATE" ] && check_pull_diffs_path
 
 # Set fetch threads
 [ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
