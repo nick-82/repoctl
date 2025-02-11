@@ -1,8 +1,8 @@
 #!/bin/sh
 
-CONF=./repoctl.conf
+CONF="./repoctl.conf"
 SCRIPT_NAME="${0##*/}"
-VERSION=0.02
+VERSION=0.03
 
 # Download progress
 progress=0
@@ -99,23 +99,23 @@ stop_process() {
 }
 
 # PID file control
-get_pid_files() {
+get_pid_file() {
   find "$PID_DIR" -type f -name "$SCRIPT_NAME.pid"
 }
 
 is_pid_empty() {
-  [ "$(get_pid_files | wc -l)" -eq 0 ] || return "$ERROR"
+  [ "$(get_pid_file | wc -l)" -eq 0 ] || return "$ERROR"
 }
 
 check_pid() {
-  [ "$(get_pid_files | wc -l)" -eq 1 ] && return "$SUCCESS"
-  [ "$(get_pid_files | wc -l)" -eq 0 ] && return "$PID_FILE_NOT_FOUND"
-  [ "$(get_pid_files | wc -l)" -gt 1 ] && return "$MANY_PID_FILES"
+  [ "$(get_pid_file | wc -l)" -eq 1 ] && return "$SUCCESS"
+  [ "$(get_pid_file | wc -l)" -eq 0 ] && return "$PID_FILE_NOT_FOUND"
+  [ "$(get_pid_file | wc -l)" -gt 1 ] && return "$MANY_PID_FILES"
   return "$ERROR"
 }
 
 get_pid() {
-  check_pid && cat $(get_pid_files)
+  check_pid && cat "$(get_pid_file)"
 }
 
 # $1 - execute command
@@ -125,7 +125,7 @@ create_pid() {
 
 remove_pid() {
   if check_pid ; then
-    rm $(get_pid_files) || return "$ERROR_REMOVE_PID" 
+    rm -f "$(get_pid_files)" || return "$ERROR_REMOVE_PID" 
   fi
 }
 
@@ -135,7 +135,7 @@ check_status() {
 
 # Check required utilities
 check_utility() {
-  while [ "$@" -gt 0 ] ; do
+  while [ "$#" -gt 0 ] ; do
     type "$1" >/dev/null 2>&1 || exit_error "$1 not found!" "$UTILITY_NOT_FOUND"
     shift
   done
@@ -203,7 +203,7 @@ parse_manifest_sed() {
   | head -n12 \
   | sed -nE 's/.*"name":"([^"]*)".*"version":"([^"]*)".*"repopath":"([^"]*)".*"sum":"([^"]*)".*/\1 \2 \3 \4/p' \
   | sort >"$2"
-  rm "${1%.*}" 
+  rm -f "${1%.*}" 
 }
 
 # Unpack and parse packagesite manifest file with awk (fast)
@@ -211,7 +211,7 @@ parse_manifest_sed() {
 # $2 - CSV packages file path 
 parse_manifest_awk() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
-  head -n20 "${1%.*}" \
+  head -n30 "${1%.*}" \
   | tail -n20 \
   | awk 'BEGIN {OFS=";"} {
       if(match($0,/"name"[^"]*"[^"]*"/)) {name=substr($0,RSTART,RLENGTH);if(match(name,/:[^"]*"[^"]*"/)){name=substr(name,RSTART+2,RLENGTH-3)}}
@@ -220,7 +220,7 @@ parse_manifest_awk() {
       if(match($0,/"sum"[^"]*"[^"]*"/)) {sum=substr($0,RSTART,RLENGTH);if(match(sum,/:[^"]*"[^"]*"/)){sum=substr(sum,RSTART+2,RLENGTH-3)}}
       {print name, version, repopath, sum} }' \
   | sort >"$2"
-  rm "${1%.*}" 
+  rm -f "${1%.*}" 
 }
 
 # Create diff packages file
@@ -274,7 +274,7 @@ check_repo_branch_env() {
 
 # $1 - abi list VERSION:ARCH format
 check_abi() {
-  [ -z $(echo "$1" | grep -E "^$REPO_VERSION:$REPO_ARCH$") ] && return "$IS_EMPTY"
+  [ -z "$(echo "$1" | grep -E "^$REPO_VERSION:$REPO_ARCH$")" ] && return "$IS_EMPTY"
 }
 
 # Local repo initialize
@@ -326,7 +326,7 @@ remove_repo_branch() {
 # $1 - repo name + branch
 # $2 - destination dir
 fetch_service_files() {
-  local remote_repo_url="$REMOTE_REPOS_URL/$1"
+  remote_repo_url="$REMOTE_REPOS_URL/$1"
   for file in $(printf "%s" "$META_FILES,$PACKAGESITE_FILES,$DATA_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}') ; do
     fetch_file "$remote_repo_url/$file" "$2"
   done
@@ -337,16 +337,18 @@ fetch_service_files() {
 # $2 - repo name + branch
 copy_service_files() {
   for file in $(printf "%s" "$META_FILES,$PACKAGESITE_FILES,$DATA_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}') ; do
-    cp -fp "$1/$file" "$2"
+    cp -fp "$1/$file" "$2" 2>/dev/null
   done
 }
 
-FETCH_SUBSRIPT=$(cat <<-'EOF'
-  fetch -aqr "$1/$0" -o "$2/$0" 2>/dev/null && echo "loaded;$0" || echo "fail;$0"
+FETCH_EXEC=$(cat <<-'EOF'
+  local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
+  [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
+  fetch -aqr "$1/$0" -o "$2/$0" && echo "loaded;$0" || echo "fail;$0"
 EOF
 )
 
-COUNT_SUBSRIPT=$(cat <<-'EOF'
+COUNT_EXEC=$(cat <<-'EOF'
   echo $(( $(tail -n1 .counter ) - 1 )) >.counter
 EOF
 )
@@ -367,21 +369,22 @@ update_repo_branch() {
   done
   if [ -n "$2" ] ; then
     create_diff "$2/${MANIFESTS%.*}.csv" "$3/${MANIFESTS%.*}.csv" "$3/$DIFF_DIR.csv"
-  else
-    >"$3/${MANIFESTS%.*}.init.csv" \
+  else { 
+    echo "" >"$3/${MANIFESTS%.*}.init.csv" \
     && create_diff "$3/${MANIFESTS%.*}.init.csv" "$3/${MANIFESTS%.*}.csv" "$3/$DIFF_DIR.csv" \
-    && rm "$3/${MANIFESTS%.*}.init.csv"
+    && rm -f "$3/${MANIFESTS%.*}.init.csv" 
+    }
   fi
 
   # set count .pkg add in PID file !!!
-  echo $(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l) >.counter
+  cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l >.counter
   # Decrement counter for xargs exec
   # echo $(( $(tail -n1 tst) - 1 )) >>tst
 
   # TODO add logging
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
-  | xargs -n1 -P"$THREADS" -I% sh -c "$FETCH_SUBSCRIPT" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
-  | xargs -n1 sh -c "$COUNT_SUBSCRIPT"
+  | xargs -n1 -P"$THREADS" -I % sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
+  | xargs -n1 sh -c "$COUNT_EXEC"
 
   copy_service_files "$3" "$REPOS_DIR/$1"
 }
@@ -395,7 +398,7 @@ parse_options() {
   OPTIND=1
   while getopts :V:A:B:hsa OPT; do
     case "$OPT" in
-      h) usage "$COMMAND" && exit "$SUCCESS" ;;
+      h) usage "$COMMAND" ;;
       s) SILENT=SILENT ;; 
       a) CHOICE=ALL ;; 
       V) case "$COMMAND" in
@@ -431,7 +434,7 @@ init_repo_handler() {
   init_repo "$REPO_VERSION" "$REPO_ARCH"
 
   if [ -n "$REPO_BRANCHES" ] ; then
-      local branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
+      branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
       for branch in $branches ; do
         [ -n "$branch" ] && init_repo_branch "$REPO_VERSION" "$REPO_ARCH" "$branch"
       done
@@ -446,7 +449,7 @@ remove_repo_handler() {
   [ -z "$REPO_ARCH" ] && exit_error "$MSG_REPO_ARCH_IS_EMPTY" "$IS_EMPTY"
 
   if [ -n "$REPO_BRANCHES" ] ; then
-    local branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
+    branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
     for branch in $branches ; do
       [ -n "$branch" ] && remove_repo_branch "$REPO_VERSION" "$REPO_ARCH" "$branch"
     done
@@ -526,7 +529,7 @@ update_repo_handler() {
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
         current_timestamp="$(timestamp)"
-        last_diff_dir=$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR" | sort | tail -n1)
+        last_diff_dir="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort | tail -n1)"
 
         if [ -z "$last_diff_dir" ] ; then 
           start_timestamp=$(cat "$repo_branch_dir/$DIFFS_DIR/.$DIFFS_DIR.init") \
@@ -535,7 +538,7 @@ update_repo_handler() {
           mkdir -p "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.${last_diff_dir##*.}.$current_timestamp"
         fi
 
-        current_diff_dir=$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR" | sort | tail -n1)
+        current_diff_dir="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort | tail -n1)"
 
         update_repo_branch "$repo_branch_name" "$last_diff_dir" "$current_diff_dir" "$current_timestamp"
       fi
