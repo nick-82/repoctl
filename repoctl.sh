@@ -85,7 +85,7 @@ load_conf() {
 
 # Create timestamp
 timestamp() {
-  date +%Y-%m-%d-%H-%M-%S
+  date '+%Y-%m-%d-%H-%M-%S'
 }
 
 # Process control
@@ -100,7 +100,11 @@ stop_process() {
 
 # PID file control
 get_pid_files() {
-  find "$PID_DIR" -type f -name "$SCRIPT_NAME.*"
+  find "$PID_DIR" -type f -name "$SCRIPT_NAME.pid"
+}
+
+is_pid_empty() {
+  [ "$(get_pid_files | wc -l)" -eq 0 ] || return "$ERROR"
 }
 
 check_pid() {
@@ -190,7 +194,7 @@ fetch_file() {
 
 # Unpack and parse packagesite manifest file with sed (slow)
 # $1 - TAR packages file path 
-# $2 - SCV packages file path 
+# $2 - CSV packages file path 
 parse_manifest_sed() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
   head -n20 "${1%.*}" \
@@ -204,7 +208,7 @@ parse_manifest_sed() {
 
 # Unpack and parse packagesite manifest file with awk (fast)
 # $1 - TAR packages file path 
-# $2 - SCV packages file path 
+# $2 - CSV packages file path 
 parse_manifest_awk() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
   head -n20 "${1%.*}" \
@@ -220,13 +224,13 @@ parse_manifest_awk() {
 }
 
 # Create diff packages file
-# $1 - first SCV sorted packages file path 
-# $2 - second SCV sorted packages file path 
-# $3 - diff SCV packages file path 
+# $1 - first CSV sorted packages file path 
+# $2 - second CSV sorted packages file path 
+# $3 - diff CSV packages file path 
 create_diff() {
   comm -23 "$1" "$2" >"${3}.1"
-  comm -23 "$1" "$2" >"${3}.2"
-  paste "${3}.1" "${3}.2" >"$3" && rm "${3}.1" "${3}.2"
+  comm -13 "$1" "$2" >"${3}.2"
+  paste "${3}.1" "${3}.2" >"$3" && rm -f "${3}.1" "${3}.2"
 }
 
 # Check exist "REPOS_DIR" directory
@@ -332,7 +336,7 @@ fetch_service_files() {
 # $1 - source dir
 # $2 - repo name + branch
 copy_service_files() {
-  for file in $(printf "%s" "$META_FILES,$PACKAGESITE_FILES,$DATA_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}' ; do
+  for file in $(printf "%s" "$META_FILES,$PACKAGESITE_FILES,$DATA_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}') ; do
     cp -fp "$1/$file" "$2"
   done
 }
@@ -357,7 +361,7 @@ update_repo_branch() {
   for file in $(printf "%s" "$PACKAGESITE_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}') ; do
     if [ -f "$3/$file" ] ; then
       #sed_parse "${file}" 
-      parse_manifest_awk "$3/$file" "$3/${MANIFESTS%.*}.scv"
+      parse_manifest_awk "$3/$file" "$3/${MANIFESTS%.*}.csv"
       break
     fi
   done
@@ -513,16 +517,16 @@ update_repo_handler() {
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
 
   if [ -n "${REPO_BRANCHES}" ] ; then 
-    local branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
+    branches=$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')
 
     for branch in $branches ; do
-      local repo_branch_name="FreeBSD:$REPO_VERSION:$REPO_ARCH/$branch"
-      local remote_repo_url="$REMOTE_REPOS_URL/$repo_branch_name"
-      local repo_branch_dir="$REPOS_DIR/$repo_branch_name"
+      repo_branch_name="FreeBSD:$REPO_VERSION:$REPO_ARCH/$branch"
+      remote_repo_url="$REMOTE_REPOS_URL/$repo_branch_name"
+      repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
-        local current_timestamp_=$(timestamp)
-        local last_diff_dir=$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR" | sort | tail -n1)
+        current_timestamp="$(timestamp)"
+        last_diff_dir=$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR" | sort | tail -n1)
 
         if [ -z "$last_diff_dir" ] ; then 
           start_timestamp=$(cat "$repo_branch_dir/$DIFFS_DIR/.$DIFFS_DIR.init") \
@@ -531,7 +535,7 @@ update_repo_handler() {
           mkdir -p "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.${last_diff_dir##*.}.$current_timestamp"
         fi
 
-        local current_diff_dir=$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR" | sort | tail -n1)
+        current_diff_dir=$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR" | sort | tail -n1)
 
         update_repo_branch "$repo_branch_name" "$last_diff_dir" "$current_diff_dir" "$current_timestamp"
       fi
@@ -585,7 +589,7 @@ load_conf
 check_repos_path
 
 # Set fetch threads
-[ "$MAX_THREADS" = "ALL" ] THREADS="$(nproc)" || THREADS="$MAX_THREADS"
+[ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
 
 # Handle exit
 trap handle_exit HUP INT QUIT ABRT TERM
@@ -615,11 +619,6 @@ esac
 
 # create tempfile
 #mktemp
-
-# TODO
-
-#$(nproc) - количество ядер
-
 #create_diff "$(ls ${REPO_PATH}/${DIFFS_DIR}/${PACKAGESITE_FILE}.* | sort | tail -n2 | head -n1)" "$(ls ${REPO_PATH}/${DIFFS_DIR}/${PACKAGESITE_FILE}.* | sort | tail -n1)" \
 #&& ls "${REPO_PATH}/${DIFFS_DIR}/${PACKAGESITE_FILE}."* | sort -r | tail -n+2 | xargs rm -f 2>/dev/null
 
