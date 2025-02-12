@@ -581,11 +581,14 @@ push_repo_handler() {
       repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
-        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort)"
-        last_diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort | tail -n"$COUNT")"
-        echo "$init_diffs"
-        echo ""
-        echo "${last_diff_dirs##*/diff.}"
+        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort -r)"
+        diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort -r )"
+        echo "$init_diffs" >"$repo_branch_dir/$DIFFS_DIR/.diffs.push"
+        echo "$diff_dirs" | awk -F/ '{print $NF}' | sed 's/^diff.//g' >"$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
+        last_diff_dirs="$(comm -13 "$repo_branch_dir/$DIFFS_DIR/.diffs.push" "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched")"
+        rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.push"
+        rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
+        echo "$last_diff_dirs"
         for dir in $last_diff_dirs ; do
           push_dir="$PUSH_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:${dir##*/}"
           mkdir -p "$push_dir/packages"
