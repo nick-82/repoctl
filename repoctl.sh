@@ -412,11 +412,12 @@ parse_options() {
   #[ "$#" -eq "0" ] && usage "$1"
   COMMAND="$1" && shift
   OPTIND=1
-  while getopts :V:A:B:n:hsa OPT; do
+  while getopts :V:A:B:n:fhsa OPT; do
     case "$OPT" in
       h) usage "$COMMAND" ;;
-      s) SILENT=SILENT ;; 
+      s) SILENT=true ;; 
       a) CHOICE=ALL ;; 
+      f) FORCE=true ;; 
       n) case "$COMMAND" in
           'push'|'pull') COUNT="${OPTARG:-1}" ;;
           *) exit_error "unknown option -$OPT for command $COMMAND" "$UNKNOWN_OPTION" ;;
@@ -580,15 +581,18 @@ push_repo_handler() {
       repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
+        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort)"
         last_diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort | tail -n"$COUNT")"
+        echo "$init_diffs"
+        echo ""
+        echo "${last_diff_dirs##*/diff.}"
         for dir in $last_diff_dirs ; do
           push_dir="$PUSH_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:${dir##*/}"
           mkdir -p "$push_dir/packages"
           cp -fp "$dir/"* "$push_dir"
-          #[ -f "$dir/$DIFF_DIR.csv" ] && echo "$dir/$DIFF_DIR.csv" 
           cut -wf2 "$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" 
-          #| xargs -n1 -P"$THREADS" -I% cp -fpR "$repo_branch_dir/"% "$push_dir/packages/"%
+          echo "${dir##*/diff.}" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
         done
       fi
     done
