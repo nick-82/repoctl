@@ -90,7 +90,6 @@ timestamp() {
 
 # Process control
 get_process() {
-  #ps | grep -E "${SCRIPT_NAME}" | grep -Ev 'grep' | awk -v re="${SCRIPT_NAME}" -v pid="$$" '$6~re && $1!=pid {print $1,$7}'
   pgrep -f "$SCRIPT_NAME" | xargs ps | awk -v re="$SCRIPT_NAME" '$6~re {print $1,$7}'
 }
 
@@ -211,7 +210,7 @@ parse_manifest_sed() {
 # $2 - CSV packages file path 
 parse_manifest_awk() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
-  head -n50 "${1%.*}" \
+  head -n60 "${1%.*}" \
   | tail -n25 \
   | awk 'BEGIN {OFS=";"} {
       if(match($0,/"name"[^"]*"[^"]*"/)) {name=substr($0,RSTART,RLENGTH);if(match(name,/:[^"]*"[^"]*"/)){name=substr(name,RSTART+2,RLENGTH-3)}}
@@ -488,6 +487,10 @@ info_repo_handler() {
 
 # Info remote repository command handler
 remote_info_repo_handler() {
+  [ "$MODE" != "PUBLIC" ] && { 
+    info "Only PUBLIC mode";
+    usage "remote-info" 
+  }
   parse_options "$@"
   #shift $(("${OPTIND}"))
   #set_repo_version "$1" && set_repo_arch "$2"
@@ -506,6 +509,10 @@ list_repo_handler() {
 
 # List remote repos command handler
 remote_list_repo_handler() {
+  [ "$MODE" != "PUBLIC" ] && {
+    info "Only PUBLIC mode";
+    usage "remote-list" 
+  }
   parse_options "$@"
   repo_remote_list \
   | cut -wf2 \
@@ -581,19 +588,18 @@ push_repo_handler() {
       repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
-        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort -r)"
-        diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort -r )"
+        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort )"
+        diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort )"
         echo "$init_diffs" >"$repo_branch_dir/$DIFFS_DIR/.diffs.push"
         echo "$diff_dirs" | awk -F/ '{print $NF}' | sed 's/^diff.//g' >"$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
-        last_diff_dirs="$(comm -13 "$repo_branch_dir/$DIFFS_DIR/.diffs.push" "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched")"
+        last_diffs="$(comm -13 "$repo_branch_dir/$DIFFS_DIR/.diffs.push" "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched")"
         rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.push"
         rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
-        echo "$last_diff_dirs"
-        for dir in $last_diff_dirs ; do
+        for dir in $last_diffs ; do
           push_dir="$PUSH_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:${dir##*/}"
           mkdir -p "$push_dir/packages"
-          cp -fp "$dir/"* "$push_dir"
-          cut -wf2 "$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+          cp -fp "$repo_branch_dir/$DIFFS_DIR/diff.$dir/"* "$push_dir"
+          cut -wf2 "$repo_branch_dir/$DIFFS_DIR/diff.$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" 
           echo "${dir##*/diff.}" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
         done

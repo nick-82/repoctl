@@ -4,3 +4,4 @@ pull_diffs/
 .*
 *.log
 !.gitignore
+.counter
