@@ -543,6 +543,10 @@ status_handler() {
 
 # Update local repository command handler
 update_repo_handler() {
+  [ "$MODE" != "PUBLIC" ] && {
+    info "Only PUBLIC mode";
+    usage "update" 
+  }
   parse_options "$@"
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
@@ -576,6 +580,10 @@ update_repo_handler() {
 
 # Push diffs from local repository to private network command handler
 push_repo_handler() {
+  [ "$MODE" != "PUBLIC" ] && {
+    info "Only PUBLIC mode";
+    usage "push" 
+  }
   parse_options "$@"
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
@@ -610,10 +618,11 @@ push_repo_handler() {
 
 # Pull diffs to private network command handler
 pull_repo_handler() {
+  [ "$MODE" != "PRIVATE" ] && {
+    info "Only PRIVATE mode";
+    usage "push" 
+  }
   parse_options "$@"
-  while : ; do
-    sleep 1
-  done &
   printf "pull handler\n"
   printf "params %s\n" "$@"
 }
