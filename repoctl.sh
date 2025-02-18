@@ -302,9 +302,10 @@ init_repo() {
 init_repo_branch() {
   [ -d "$REPOS_DIR/FreeBSD:$1:$2/$3" ] \
   && warn "repo branch $REPOS_DIR/FreeBSD:$1:$2/$3 is exist, ignore init new repo branch" \
-  || ( mkdir -p "$REPOS_DIR/FreeBSD:$1:$2/$3/$DIFFS_DIR" \
-       && timestamp >"$REPOS_DIR/FreeBSD:$1:$2/$3/$DIFFS_DIR/.$DIFFS_DIR.init" \
-       && success "repo branch $REPOS_DIR/FreeBSD:$1:$2/$3 is created" )
+  || ( mkdir -p "$REPOS_DIR/FreeBSD:$1:$2/$3/$DIFFS_DIR" 
+       [ "$MODE" = "PUBLIC" ] && timestamp >"$REPOS_DIR/FreeBSD:$1:$2/$3/$DIFFS_DIR/.$DIFFS_DIR.init" 
+       [ "$MODE" = "PRIVATE" ] && touch "$REPOS_DIR/FreeBSD:$1:$2/$3/$DIFFS_DIR/.$DIFFS_DIR.init" 
+       success "repo branch $REPOS_DIR/FreeBSD:$1:$2/$3 is created" )
 }
 
 # Local repo remove
@@ -487,10 +488,11 @@ info_repo_handler() {
 
 # Info remote repository command handler
 remote_info_repo_handler() {
-  [ "$MODE" != "PUBLIC" ] && { 
-    info "Only PUBLIC mode";
+  if [ "$MODE" != "PUBLIC" ] ; then 
+    info "Only PUBLIC mode"
     usage "remote-info" 
-  }
+  fi
+
   parse_options "$@"
   #shift $(("${OPTIND}"))
   #set_repo_version "$1" && set_repo_arch "$2"
@@ -509,11 +511,13 @@ list_repo_handler() {
 
 # List remote repos command handler
 remote_list_repo_handler() {
-  [ "$MODE" != "PUBLIC" ] && {
-    info "Only PUBLIC mode";
+  if [ "$MODE" != "PUBLIC" ] ; then 
+    info "Only PUBLIC mode"
     usage "remote-list" 
-  }
+  fi
+
   parse_options "$@"
+
   repo_remote_list \
   | cut -wf2 \
   | sort \
@@ -543,11 +547,13 @@ status_handler() {
 
 # Update local repository command handler
 update_repo_handler() {
-  [ "$MODE" != "PUBLIC" ] && {
-    info "Only PUBLIC mode";
+  if [ "$MODE" != "PUBLIC" ] ; then 
+    info "Only PUBLIC mode"
     usage "update" 
-  }
+  fi
+
   parse_options "$@"
+
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
 
@@ -580,11 +586,13 @@ update_repo_handler() {
 
 # Push diffs from local repository to private network command handler
 push_repo_handler() {
-  [ "$MODE" != "PUBLIC" ] && {
-    info "Only PUBLIC mode";
+  if [ "$MODE" != "PUBLIC" ] ; then 
+    info "Only PUBLIC mode"
     usage "push" 
-  }
+  fi
+
   parse_options "$@"
+
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
 
@@ -618,13 +626,29 @@ push_repo_handler() {
 
 # Pull diffs to private network command handler
 pull_repo_handler() {
-  [ "$MODE" != "PRIVATE" ] && {
-    info "Only PRIVATE mode";
-    usage "push" 
-  }
+  if [ "$MODE" != "PRIVATE" ] ; then 
+    info "Only PRIVATE mode"
+    usage "pull" 
+  fi
+
   parse_options "$@"
-  printf "pull handler\n"
-  printf "params %s\n" "$@"
+
+  [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
+  [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
+
+  if [ -n "${REPO_BRANCHES}" ] ; then 
+    branches="$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')"
+
+    for branch in $branches ; do
+      repo_branch_name="FreeBSD:$REPO_VERSION:$REPO_ARCH/$branch"
+      repo_branch_dir="$REPOS_DIR/$repo_branch_name"
+
+      if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
+        current_diff_dirs="$(find "$PULL_DIFFS_DIR" -type d -name "FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch*" | sort )"
+        echo "$current_diff_dirs"
+      fi
+    done
+  fi
 }
 
 # History updates local repository
