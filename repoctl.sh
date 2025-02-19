@@ -369,6 +369,11 @@ COPY_EXEC=$(cat <<-'EOF'
 EOF
 )
 
+REMOVE_EXEC=$(cat <<-'EOF'
+  rm -f "$1/$0" 
+EOF
+)
+
 # Update repo branch
 # $1 - repo name + branch
 # $2 - last diff dir
@@ -606,15 +611,20 @@ push_repo_handler() {
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
         init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort )"
         diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort )"
+
         echo "$init_diffs" >"$repo_branch_dir/$DIFFS_DIR/.diffs.push"
         echo "$diff_dirs" | awk -F/ '{print $NF}' | sed 's/^diff.//g' >"$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
+
         last_diffs="$(comm -13 "$repo_branch_dir/$DIFFS_DIR/.diffs.push" "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched")"
+
         rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.push"
         rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
+
         for dir in $last_diffs ; do
           push_dir="$PUSH_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:${dir##*/}"
           mkdir -p "$push_dir/packages"
           cp -fp "$repo_branch_dir/$DIFFS_DIR/diff.$dir/"* "$push_dir"
+
           cut -wf2 "$repo_branch_dir/$DIFFS_DIR/diff.$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" 
           echo "${dir##*/diff.}" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
@@ -644,8 +654,27 @@ pull_repo_handler() {
       repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
-        current_diff_dirs="$(find "$PULL_DIFFS_DIR" -type d -name "FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch*" | sort )"
-        echo "$current_diff_dirs"
+        init_diffs="$(sort "$repo_branch_dir/$DIFFS_DIR/.diffs.init")"
+        pull_diff_dirs="$(find "$PULL_DIFFS_DIR" -type d -name "FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch*" | sort )"
+
+        echo "$init_diffs" >"$repo_branch_dir/$DIFFS_DIR/.diffs.pull"
+        echo "$pull_diff_dirs" | awk -F/ '{print $NF}' | awk -F: '{print $NF}' >"$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
+
+        last_diffs="$(comm -13 "$repo_branch_dir/$DIFFS_DIR/.diffs.pull" "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched")"
+
+        rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.pull"
+        rm -f "$repo_branch_dir/$DIFFS_DIR/.diffs.fetched"
+
+        for diff in $last_diffs ; do
+          pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
+          copy_service_files "$pull_dir" "$repo_branch_dir"
+          cut -wf2 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+          | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" %  "$pull_dir/packages" "$repo_branch_dir"
+          cut -wf1 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+          | xargs -n1 -P"$THREADS" -I % sh -c "$REMOVE_EXEC" % "$repo_branch_dir"
+          echo "$diff" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
+          rm -rf "$pull_dir"
+        done
       fi
     done
   fi
