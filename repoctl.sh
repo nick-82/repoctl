@@ -210,7 +210,7 @@ parse_manifest_sed() {
 # $2 - CSV packages file path 
 parse_manifest_awk() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
-  head -n60 "${1%.*}" \
+  head -n30 "${1%.*}" \
   | tail -n25 \
   | awk 'BEGIN {OFS=";"} {
       if(match($0,/"name"[^"]*"[^"]*"/)) {name=substr($0,RSTART,RLENGTH);if(match(name,/:[^"]*"[^"]*"/)){name=substr(name,RSTART+2,RLENGTH-3)}}
@@ -358,7 +358,7 @@ EOF
 )
 
 COUNT_EXEC=$(cat <<-'EOF'
-  echo $(( $(tail -n1 .counter ) - 1 )) >.counter
+  #echo $(( $(tail -n1 .counter ) - 1 )) >.counter
 EOF
 )
 
@@ -398,7 +398,7 @@ update_repo_branch() {
   fi
 
   # set count .pkg add in PID file !!!
-  cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l >.counter
+  #cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l >.counter
   # Decrement counter for xargs exec
   # echo $(( $(tail -n1 tst) - 1 )) >>tst
 
