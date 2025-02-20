@@ -668,12 +668,13 @@ pull_repo_handler() {
         for diff in $last_diffs ; do
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
           copy_service_files "$pull_dir" "$repo_branch_dir"
+          cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
           cut -wf2 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" %  "$pull_dir/packages" "$repo_branch_dir"
           cut -wf1 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -I % sh -c "$REMOVE_EXEC" % "$repo_branch_dir"
           echo "$diff" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
-          rm -rf "$pull_dir"
+          #rm -rf "$pull_dir"
         done
       fi
     done
