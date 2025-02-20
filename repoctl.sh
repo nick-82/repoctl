@@ -149,7 +149,7 @@ handle_exit() {
 # $2 - message text
 log() {
   [ "$SYSLOG" = "true" ] && logger -p "$1" -t "${SCRIPT_NAME%.*}" "$2" 
-  [ "$FILELOG" = "true" ] && printf "%s %s %s\n" "$(timestamp)" "$1" "$2" >>"$FILELOG_DIR/${SCRIPT_NAME%.}.log"
+  [ "$FILELOG" = "true" ] && echo "$(timestamp)" "$1" "$2" >>"$FILELOG_DIR/${SCRIPT_NAME%.*}.log"
 }
 
 # Error logger
@@ -182,7 +182,7 @@ strip_str_frame() {
 # $2 - upload directory
 fetch_file() {
   if fetch -aqr "$1" -o "$2" 2>/dev/null; then log_info "$1 loaded to $2" 
-    else log_error "$1 not loaded to $2 by code $?" 
+    else log_info "$1 not loaded to $2 by code $?" 
   fi
 }
 
@@ -210,8 +210,8 @@ parse_manifest_sed() {
 # $2 - CSV packages file path 
 parse_manifest_awk() {
   tar -xJOf "$1" "$MANIFESTS" >"${1%.*}"
-  head -n30 "${1%.*}" \
-  | tail -n25 \
+  head -n"$TEMP_HEAD_RECORDS" "${1%.*}" \
+  | tail -n"$TEMP_TAIL_RECORDS" \
   | awk 'BEGIN {OFS=";"} {
       if(match($0,/"name"[^"]*"[^"]*"/)) {name=substr($0,RSTART,RLENGTH);if(match(name,/:[^"]*"[^"]*"/)){name=substr(name,RSTART+2,RLENGTH-3)}}
       if(match($0,/"version"[^"]*"[^"]*"/)) {version=substr($0,RSTART,RLENGTH);if(match(version,/:[^"]*"[^"]*"/)){version=substr(version,RSTART+2,RLENGTH-3)}}
@@ -353,7 +353,7 @@ copy_service_files() {
 FETCH_EXEC=$(cat <<-'EOF'
   local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
   [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
-  fetch -aqr "$1/$0" -o "$2/$0" && echo "loaded;$0" || echo "fail;$0"
+  fetch -aqr "$1/$0" -o "$2/$0" 2>/dev/null && echo "success;fetch;$0" || echo "fail;fetch;$0"
 EOF
 )
 
@@ -365,12 +365,26 @@ EOF
 COPY_EXEC=$(cat <<-'EOF'
   local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
   [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
-  cp -fpR "$1/$0" "$2/$0"
+  cp -fpR "$1/$0" "$2/$0" 2>/dev/null && echo "success;copy;$0" || echo "fail;copy;$0"
 EOF
 )
 
 REMOVE_EXEC=$(cat <<-'EOF'
-  rm -f "$1/$0" 
+  rm -f "$1/$0" 2>/dev/null && echo "success;remove;$0" || echo "fail;remove;$0"
+EOF
+)
+
+# $0 message text
+# $1 message priority
+# $2 SCRIPT_BASENAME
+# $3 SYSLOG
+# $4 FILELOG
+# $5 FILELOG_DIR
+# $6 timestamp
+LOG_EXEC=$(cat <<-'EOF'
+  message="$(echo $0 | tr ';' ' ' )"
+  [ "$3" = "true" ] && logger -p "$1" -t "$2" "$message" 
+  [ "$4" = "true" ] && echo "$6" "$1" "$message" >>"$5/$2.log"
 EOF
 )
 
@@ -404,8 +418,8 @@ update_repo_branch() {
 
   # TODO add logging
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
-  | xargs -n1 -P"$THREADS" -I % sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
-  | xargs -n1 sh -c "$COUNT_EXEC"
+  | xargs -n1 -P"$THREADS" -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
+  | xargs -n1 -S1024 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
 
   copy_service_files "$3" "$REPOS_DIR/$1"
 }
@@ -609,7 +623,7 @@ push_repo_handler() {
       repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
-        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.diffs.init" | sort )"
+        init_diffs="$(sed '1d' "$repo_branch_dir/$DIFFS_DIR/.$DIFFS_DIR.init" | sort )"
         diff_dirs="$(find "$repo_branch_dir/$DIFFS_DIR" -type d -name "$DIFF_DIR.*" | sort )"
 
         echo "$init_diffs" >"$repo_branch_dir/$DIFFS_DIR/.diffs.push"
@@ -623,11 +637,12 @@ push_repo_handler() {
         for dir in $last_diffs ; do
           push_dir="$PUSH_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:${dir##*/}"
           mkdir -p "$push_dir/packages"
-          cp -fp "$repo_branch_dir/$DIFFS_DIR/diff.$dir/"* "$push_dir"
+          cp -fp "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.$dir/"* "$push_dir"
 
-          cut -wf2 "$repo_branch_dir/$DIFFS_DIR/diff.$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
-          | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" 
-          echo "${dir##*/diff.}" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
+          cut -wf2 "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+          | xargs -n1 -P"$THREADS" -I% sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" \
+          | xargs -n1 -S1024 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+          echo "${dir##*/diff.}" >>"$repo_branch_dir/$DIFFS_DIR/.$DIFFS_DIR.init"
         done
       fi
     done
@@ -669,10 +684,15 @@ pull_repo_handler() {
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
           copy_service_files "$pull_dir" "$repo_branch_dir"
           cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
+
           cut -wf2 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
-          | xargs -n1 -P"$THREADS" -I % sh -c "$COPY_EXEC" %  "$pull_dir/packages" "$repo_branch_dir"
+          | xargs -n1 -P"$THREADS" -I% sh -c "$COPY_EXEC" %  "$pull_dir/packages" "$repo_branch_dir" \
+          | xargs -n1 -P1 -S1024 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+
           cut -wf1 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
-          | xargs -n1 -P"$THREADS" -I % sh -c "$REMOVE_EXEC" % "$repo_branch_dir"
+          | xargs -n1 -P"$THREADS" -I% sh -c "$REMOVE_EXEC" % "$repo_branch_dir" \
+          | xargs -n1 -P1 -S1024 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+
           echo "$diff" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
           #rm -rf "$pull_dir"
         done
