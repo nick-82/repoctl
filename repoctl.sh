@@ -181,8 +181,8 @@ strip_str_frame() {
 # $1 - file URI 
 # $2 - upload directory
 fetch_file() {
-  if fetch -aqr "$1" -o "$2" 2>/dev/null; then log_info "success fetch $1 to $2" 
-    else log_info "error fetch $1 to $2 by code $?" 
+  if fetch -aqr "$1" -o "$2" 2>/dev/null; then log_info "success fetch $1 to $2/" 
+    else log_info "fail fetch $1 to $2/ by code $?" 
   fi
 }
 
@@ -353,7 +353,7 @@ copy_service_files() {
 FETCH_EXEC=$(cat <<-'EOF'
   local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
   [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
-  fetch -aqr "$1/$0" -o "$2/$0" 2>/dev/null && echo "success;fetch;$0" || echo "fail;fetch;$0"
+  fetch -aqr "$1/$0" -o "$2/$0" 2>/dev/null && echo "success;fetch;$1/$0;to;$2/" || echo "fail;fetch;$1/$0;to;$2/"
 EOF
 )
 
@@ -365,12 +365,12 @@ EOF
 COPY_EXEC=$(cat <<-'EOF'
   local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
   [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
-  cp -fpR "$1/$0" "$2/$0" 2>/dev/null && echo "success;copy;$0" || echo "fail;copy;$0"
+  cp -fpR "$1/$0" "$2/$0" 2>/dev/null && echo "success;copy;$1/$0;to;$2/" || echo "fail;copy;$1/$0;to;$2/"
 EOF
 )
 
 REMOVE_EXEC=$(cat <<-'EOF'
-  rm -f "$1/$0" 2>/dev/null && echo "success;remove;$0" || echo "fail;remove;$0"
+  rm -f "$1/$0" 2>/dev/null && echo "success;remove;$1/$0" || echo "fail;remove;$1/$0"
 EOF
 )
 
@@ -694,7 +694,7 @@ pull_repo_handler() {
           | xargs -n1 -P1 -S1024 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
 
           echo "$diff" >>"$repo_branch_dir/$DIFFS_DIR/.diffs.init"
-          #rm -rf "$pull_dir"
+          rm -rf "$pull_dir"
         done
       fi
     done
