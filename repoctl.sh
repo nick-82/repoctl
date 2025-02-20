@@ -181,8 +181,8 @@ strip_str_frame() {
 # $1 - file URI 
 # $2 - upload directory
 fetch_file() {
-  if fetch -aqr "$1" -o "$2" 2>/dev/null; then log_info "$1 loaded to $2" 
-    else log_info "$1 not loaded to $2 by code $?" 
+  if fetch -aqr "$1" -o "$2" 2>/dev/null; then "success fetch $1 to $2" 
+    else log_info "error fetch $1 to $2 by code $?" 
   fi
 }
 
