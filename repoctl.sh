@@ -346,7 +346,9 @@ fetch_service_files() {
 # $2 - repo name + branch
 copy_service_files() {
   for file in $(printf "%s" "$META_FILES,$PACKAGESITE_FILES,$DATA_FILES" | awk -F, 'BEGIN {OFS=" "} {$1=$1; print}') ; do
-    [ -f "$1/$file" ] && cp -fp "$1/$file" "$2"
+    if [ -f "$1/$file" ] ; then  
+      cp -fp "$1/$file" "$2" 2>/dev/null && log_info "success copy $1 to $2/" || log_info "fail copy $1 to $2/ by code $?"
+    fi
   done
 }
 
