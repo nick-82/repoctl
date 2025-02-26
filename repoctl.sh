@@ -4,6 +4,152 @@ CONF="./repoctl.conf"
 SCRIPT_NAME="${0##*/}"
 VERSION=0.03
 
+##########################################RETURN CODE##########################################
+SUCCESS=0
+ERROR=65
+MISSING_OPT_ARG=66
+UNKNOWN_OPTION=67
+NOT_FOUND=75
+NOT_EXIST=110
+IS_EMPTY=111
+IS_EXIST=112
+ERROR_FILE_MODE=113
+DOWNLOAD_FAILED=80
+NO_EXEC_PROCESS=90
+MANY_EXEC_PROCESSES=91
+ERROR_CREATE=100
+ERROR_REMOVE=101
+MANY_PID_FILES=105
+PID_FILE_NOT_FOUND=106
+ERROR_CREATE_PID=107
+##########################################/RETURN CODE#########################################
+
+##########################################MESSAGES#############################################
+MSG_NOT_FOUND='not found'
+MSG_MISSING_OPT_ARG='Option requires an argument'
+MSG_UTILITY_NOT_FOUND='utility not found'
+MSG_FILE_NOT_FOUND='file not found'
+MSG_DOWNLOAD_FAILED='download failed'
+MSG_NO_EXEC_PROCESS='no exec process'
+MSG_MANY_EXEC_PROCESSES='many exec processes'
+MSG_ERROR_CREATE_PID='error create PID file'
+MSG_ERROR_CREATE_PID='error remove PID file'
+MSG_PID_FILE_NOT_FOUND='PID file not found'
+MSG_MANY_PID_FILES='many PID files'
+MSG_REPO_VERSION_NOT_EXIST='repo version not exist'
+MSG_REPO_VERSION_IS_EMPTY='repo version is empty'
+MSG_REPO_ARCH_NOT_EXIST='repo arch not exist'
+MSG_REPO_ARCH_IS_EMPTY='repo arch is empty'
+MSG_REPO_BRANCH_NOT_EXIST='repo branch not exist'
+MSG_REPO_BRANCH_IS_EMPTY='repo branch is empty'
+MSG_REPO_ABI_NOT_EXIST='repo abi nor exist'
+MSG_ERROR_REMOVE_REPO='error remove repo'
+##########################################/MESSAGES############################################
+
+##########################################USAGE MESSAGES#######################################
+MSG_USAGE_MAIN=$(cat << EOF
+    Shell script for upload FreeBSD repositories.
+
+    Global options supported:
+        -h             This message
+        -v             Script version 
+    Commands supported:
+        init           Initialize local repo 
+        remove         Remove local repo 
+        info           Info local repo 
+        remote-info    Remote repo info (Only PUBLIC MODE)
+        list           List local repos 
+        remote-list    Remote repos list (Only PUBLUC MODE)
+        check          Check local repo packages
+        remote-check   Diffs between local and remote repo packages (Only PUBLIC MODE)
+        status         Script jobs status
+        update         Update local repo from remote repo (Only PUBLIC MODE)
+        push           Push repo diffs to private network
+        pull           Pull repo diffs to private network
+        log            History local repo diffs
+
+    For more information on the different commands see repoctl.sh <command> -h.
+EOF
+)
+
+MSG_USAGE_INIT=$(cat << EOF
+    Command init (local empty repo initialize)
+EOF
+)
+
+MSG_USAGE_REMOVE=$(cat << EOF
+    Command remove (remove local repo)
+EOF
+)
+
+MSG_USAGE_INFO=$(cat << EOF
+    Command info (info local repo)
+EOF
+)
+
+MSG_USAGE_REMOTE_INFO=$(cat << EOF
+    Command remote-info (remote repo info (Only PUBLIC MODE))
+EOF
+)
+
+MSG_USAGE_LIST=$(cat << EOF
+     Command list (list local repos)
+EOF
+)
+
+MSG_USAGE_REMOTE_LIST=$(cat << EOF
+    Command remote-list (remote repos list (Only PUBLIC MODE))
+EOF
+)
+
+MSG_USAGE_CHECK=$(cat << EOF
+    Command check (check local repo packages)
+EOF
+)
+
+MSG_USAGE_REMOTE_CHECK=$(cat << EOF
+    Command remote-check (diffs between local and remote repo packages (Only PUBLIC MODE))
+EOF
+)
+
+MSG_USAGE_STATUS=$(cat << EOF
+    Command status (script jobs status)
+EOF
+)
+
+MSG_USAGE_UPDATE=$(cat << EOF
+    Command update (update local repo from remote repo (Only PUBLIC MODE))
+EOF
+)
+
+MSG_USAGE_PUSH=$(cat << EOF
+    Command push (push repo diffs to private network)
+EOF
+)
+
+MSG_USAGE_PULL=$(cat << EOF
+    Command pull (pull repo diffs to private network)
+EOF
+)
+
+MSG_USAGE_LOG=$(cat << EOF
+    Command log (history local repo diffs)
+EOF
+)
+##########################################/USAGE MSGS######################################
+
+# set meta files names
+META_FILES=meta,meta.conf
+
+# set packagesite files names
+PACKAGESITE_FILES=packagesite.pkg,packagesite.txz,packagesite.tzst
+
+# set data files names
+DATA_FILES=data.pkg,data.txz,data.tzst
+
+# set manifest file name
+MANIFESTS=packagesite.yaml
+
 # Download progress
 progress=0
 
@@ -98,38 +244,44 @@ stop_process() {
 }
 
 # PID file control
-get_pid_file() {
-  find "$PID_DIR" -type f -name "$SCRIPT_NAME.pid"
-}
-
-is_pid_empty() {
-  [ "$(get_pid_file | wc -l)" -eq 0 ] || return "$ERROR"
-}
-
 check_pid() {
-  [ "$(get_pid_file | wc -l)" -eq 1 ] && return "$SUCCESS"
-  [ "$(get_pid_file | wc -l)" -eq 0 ] && return "$PID_FILE_NOT_FOUND"
-  [ "$(get_pid_file | wc -l)" -gt 1 ] && return "$MANY_PID_FILES"
-  return "$ERROR"
+  [ -f "$PID_DIR/$SCRIPT_NAME.pid" ] || return "$PID_FILE_NOT_FOUND" 
 }
 
 get_pid() {
-  check_pid && cat "$(get_pid_file)"
+  check_pid && cat "$PID_DIR/$SCRIPT_NAME.pid"
 }
 
 # $1 - execute command
 create_pid() {
-  printf "$$\n$1" >"$PID_DIR/$SCRIPT_NAME.$$" || return "$ERROR_CREATE_PID"
+  echo "$$" >"$PID_DIR/$SCRIPT_NAME.pid" || return "$ERROR_CREATE_PID"
 }
 
 remove_pid() {
   if check_pid ; then
-    rm -f "$(get_pid_files)" || return "$ERROR_REMOVE_PID" 
+    rm -f "$PID_DIR/$SCRIPT_NAME.pid" || return "$ERROR_REMOVE_PID" 
   fi
 }
 
 check_status() {
   return 0
+}
+
+# pipe counter
+create_counter() {
+  mkfifo "$TEMP_DIR/counter"
+}
+
+remove_counter() {
+  [ -p "$TEMP_DIR/counter" ] && rm -f "$TEMP_DIR/counter"
+}
+
+set_counter() {
+  echo "$1" >"$TEMP_DIR/counter"
+}
+
+get_counter() {
+  tail -n1 "$TEMP_DIR/counter"
 }
 
 # Check required utilities
@@ -141,6 +293,7 @@ check_utility() {
 }
 
 handle_exit() {
+  remove_counter
   remove_pid
 }
 
@@ -776,5 +929,7 @@ esac
 
 # Debug mode off
 [ "$DEBUG" = "true" ] && set +x
+
+handle_exit 
 
 exit "$SUCCESS"
