@@ -267,21 +267,21 @@ check_status() {
   return 0
 }
 
-# pipe counter
-create_counter() {
-  mkfifo "$TEMP_DIR/counter"
+# pipe progress
+create_progress() {
+  mkfifo "$TEMP_DIR/progress"
 }
 
-remove_counter() {
-  [ -p "$TEMP_DIR/counter" ] && rm -f "$TEMP_DIR/counter"
+remove_progress() {
+  [ -p "$TEMP_DIR/progress" ] && rm -f "$TEMP_DIR/progress"
 }
 
-set_counter() {
-  echo "$1" >"$TEMP_DIR/counter"
+push_progress() {
+  echo "$1" >"$TEMP_DIR/progress" &
 }
 
-get_counter() {
-  tail -n1 "$TEMP_DIR/counter"
+pop_progerss() {
+  tail -n1 "$TEMP_DIR/progress"
 }
 
 # Check required utilities
