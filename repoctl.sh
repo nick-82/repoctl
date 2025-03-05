@@ -598,7 +598,7 @@ update_repo_branch() {
   max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
   count_packages=0
   create_progress
-  exec 3<>"$TEMP_DIR/progress"
+  #exec 3<>"$TEMP_DIR/progress"
 
   # TODO fix counter functional
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
@@ -609,7 +609,7 @@ update_repo_branch() {
   #| xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" 3>"$TEMP_DIR/progress" &
 
   cat "$TEMP_DIR/progress"
-  exec 3>&-
+  #exec 3>&-
   remove_progress
 
   copy_service_files "$3" "$REPOS_DIR/$1"
