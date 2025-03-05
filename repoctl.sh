@@ -554,6 +554,15 @@ LOG_EXEC=$(cat <<-'EOF'
   message="$(echo $0 | tr ';' ' ' )"
   [ "$3" = "true" ] && logger -p "$1" -t "$2" "$message" 
   [ "$4" = "true" ] && echo "$6" "$1" "$message" >>"$5/$2.log"
+  echo "true"
+EOF
+)
+
+PROGRESS_EXEC=$(cat <<-'EOF'
+  echo "$0/$1 $2"
+  echo "$0/$1" >"$2" &
+  echo "$!"
+  wait "$!"
 EOF
 )
 
@@ -591,10 +600,13 @@ update_repo_branch() {
   create_progress
   exec 3<>"$TEMP_DIR/progress"
 
+  # TODO fix counter functional
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
   | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" \
-  | xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" 3>"$TEMP_DIR/progress" &
+  | xargs -n1 -I% $(count_packages=$(( $count_packages + 1 ))) \
+  | xargs -n1 -I% echo %"/$max_packages" >"$TEMP_DIR/progress" &
+  #| xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" 3>"$TEMP_DIR/progress" &
 
   cat "$TEMP_DIR/progress"
   exec 3>&-
