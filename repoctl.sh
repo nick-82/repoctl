@@ -280,8 +280,8 @@ push_progress() {
   echo "$1" >"$TEMP_DIR/progress" &
 }
 
-pop_progerss() {
-  tail -n1 "$TEMP_DIR/progress"
+show_progress() {
+  [ -p "$TEMP_DIR/progress" ] && tail -n1 "$TEMP_DIR/progress"
 }
 
 # Check required utilities
@@ -293,7 +293,7 @@ check_utility() {
 }
 
 handle_exit() {
-  remove_counter
+  remove_progress
   remove_pid
 }
 
@@ -586,9 +586,16 @@ update_repo_branch() {
   # echo $(( $(tail -n1 tst) - 1 )) >>tst
 
   # TODO add logging
+  max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
+  count_packages=0
+  create_progress
+
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
-  | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+  | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" \
+  | xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" >"$TEMP_DIR/progress" &
+
+  remove_progress
 
   copy_service_files "$3" "$REPOS_DIR/$1"
 }
@@ -729,6 +736,7 @@ remote_check_repo_handler() {
 status_handler() {
   parse_options "$@"
   get_process | awk 'BEGIN {print "PID","COMMAND"} {print}' 
+  show_progress
 }
 
 # Update local repository command handler
@@ -836,6 +844,7 @@ pull_repo_handler() {
       repo_branch_dir="$REPOS_DIR/$repo_branch_name"
 
       if [ -n "$branch" ] && [ -d "$repo_branch_dir" ] ; then 
+        [ -f "$repo_branch_dir/$DIFFS_DIR/.diffs.init" ] || exit_error "$repo_branch_dir/$DIFFS_DIR/.diffs.init" "$NOT_EXIST"
         init_diffs="$(sort "$repo_branch_dir/$DIFFS_DIR/.diffs.init")"
         pull_diff_dirs="$(find "$PULL_DIFFS_DIR" -type d -name "FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch*" | sort )"
 
