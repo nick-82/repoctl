@@ -538,6 +538,11 @@ COPY_EXEC=$(cat <<-'EOF'
 EOF
 )
 
+CHECK_EXEC=$(cat <<-'EOF'
+  [ -f "$1/$0" ] && echo "success;check;$1/$0" || echo "fail;check;$1/$0"
+EOF
+)
+
 REMOVE_EXEC=$(cat <<-'EOF'
   rm -f "$1/$0" 2>/dev/null && echo "success;remove;$1/$0" || echo "fail;remove;$1/$0"
 EOF
@@ -597,20 +602,20 @@ update_repo_branch() {
   # TODO add logging
   max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
   count_packages=0
-  create_progress
+  #create_progress
   #exec 3<>"$TEMP_DIR/progress"
 
   # TODO fix counter functional
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
-  | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" \
-  | xargs -n1 -I% $(count_packages=$(( $count_packages + 1 ))) \
-  | xargs -n1 -I% echo %"/$max_packages" >"$TEMP_DIR/progress" &
+  | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" 
+  #| xargs -n1 -I% $(count_packages=$(( $count_packages + 1 ))) \
+  #| xargs -n1 -I% echo %"/$max_packages" >"$TEMP_DIR/progress" &
   #| xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" 3>"$TEMP_DIR/progress" &
 
-  cat "$TEMP_DIR/progress"
+  #cat "$TEMP_DIR/progress"
   #exec 3>&-
-  remove_progress
+  #remove_progress
 
   copy_service_files "$3" "$REPOS_DIR/$1"
 }
@@ -837,6 +842,17 @@ push_repo_handler() {
       fi
     done
   fi
+}
+
+# $1 - path to (push/pull) diff dir
+check_diff_dir() {
+  [ -d "$1" ] || exit_error "$1 not exist" "$NOT_EXIST"
+  checked_diff_dir="$(echo "$1" | awk -F/ '{print $NF}' | awk -F: '{print $NF}')"
+  [ -f "$1/$DIFF_DIR.csv" ] || exit_error "$1/${DIFF_DIR}.csv" "$NOT_EXIST"
+
+  cut -wf2 "$1/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+  | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$CHECK_EXEC" % "$1/packages" \
+  | echo
 }
 
 # Pull diffs to private network command handler
