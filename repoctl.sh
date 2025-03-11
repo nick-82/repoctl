@@ -604,7 +604,7 @@ update_repo_branch() {
   # TODO fix counter functional
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
-  | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" 
+  | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" \
   | xargs -n1 -I% $(count_packages=$(( $count_packages + 1 ))) \
   | xargs -n1 -I% sh -c "$PROGRESS_EXEC" %"/$max_packages" "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
   #| xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" 3>"$TEMP_DIR/progress" &
