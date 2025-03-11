@@ -3,5 +3,6 @@ push_diffs/
 pull_diffs/
 .*
 *.log
+*.bak
 !.gitignore
 .counter
