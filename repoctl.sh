@@ -848,7 +848,7 @@ check_diff_dir() {
 
   cut -wf2 "$1/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$CHECK_EXEC" % "$1/packages" \
-  | echo
+  | xargs -n1 echo
 }
 
 # Pull diffs to private network command handler
@@ -885,7 +885,7 @@ pull_repo_handler() {
 
         for diff in $last_diffs ; do
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
-	  check_diff_dir "$pull_dir"
+          check_diff_dir "$pull_dir"
           copy_service_files "$pull_dir" "$repo_branch_dir"
           cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
 
