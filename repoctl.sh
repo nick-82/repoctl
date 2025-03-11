@@ -151,7 +151,6 @@ DATA_FILES=data.pkg,data.txz,data.tzst
 MANIFESTS=packagesite.yaml
 
 # Download progress
-progress=0
 
 ##########################################USAGE########################################
 
@@ -269,19 +268,19 @@ check_status() {
 
 # pipe progress
 create_progress() {
-  mkfifo "$TEMP_DIR/progress"
+  >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 remove_progress() {
-  [ -p "$TEMP_DIR/progress" ] && rm -f "$TEMP_DIR/progress"
+  [ -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress" ] && rm -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 push_progress() {
-  echo "$1" >"$TEMP_DIR/progress" &
+  echo "$1" >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 show_progress() {
-  [ -p "$TEMP_DIR/progress" ] && tail -n1 "$TEMP_DIR/progress"
+  [ -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress" ] && tail -n1 "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 # Check required utilities
@@ -564,10 +563,7 @@ EOF
 )
 
 PROGRESS_EXEC=$(cat <<-'EOF'
-  echo "$0/$1 $2"
-  echo "$0/$1" >"$2" &
-  echo "$!"
-  wait "$!"
+  echo "$0" >>"$1" 
 EOF
 )
 
@@ -602,15 +598,15 @@ update_repo_branch() {
   # TODO add logging
   max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
   count_packages=0
-  #create_progress
+  create_progress
   #exec 3<>"$TEMP_DIR/progress"
 
   # TODO fix counter functional
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
   | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" 
-  #| xargs -n1 -I% $(count_packages=$(( $count_packages + 1 ))) \
-  #| xargs -n1 -I% echo %"/$max_packages" >"$TEMP_DIR/progress" &
+  | xargs -n1 -I% $(count_packages=$(( $count_packages + 1 ))) \
+  | xargs -n1 -I% sh -c "$PROGRESS_EXEC" %"/$max_packages" "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
   #| xargs -n1 $(count_packages=$(( $count_packages + 1 ))) | xargs -n1 -I% echo %"/$max_packages" 3>"$TEMP_DIR/progress" &
 
   #cat "$TEMP_DIR/progress"
