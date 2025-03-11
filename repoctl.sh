@@ -795,6 +795,17 @@ update_repo_handler() {
   fi
 }
 
+# $1 - path to (push/pull) diff dir
+check_diff_dir() {
+  [ -d "$1" ] || exit_error "$1 not exist" "$NOT_EXIST"
+  checked_diff_dir="$(echo "$1" | awk -F/ '{print $NF}' | awk -F: '{print $NF}')"
+  [ -f "$1/$DIFF_DIR.csv" ] || exit_error "$1/${DIFF_DIR}.csv" "$NOT_EXIST"
+
+  cut -wf2 "$1/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+  | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$CHECK_EXEC" % "$1/packages" \
+  | xargs -n1 echo
+}
+
 # Push diffs from local repository to private network command handler
 push_repo_handler() {
   if [ "$MODE" != "PUBLIC" ] ; then 
@@ -841,17 +852,6 @@ push_repo_handler() {
   fi
 }
 
-# $1 - path to (push/pull) diff dir
-check_diff_dir() {
-  [ -d "$1" ] || exit_error "$1 not exist" "$NOT_EXIST"
-  checked_diff_dir="$(echo "$1" | awk -F/ '{print $NF}' | awk -F: '{print $NF}')"
-  [ -f "$1/$DIFF_DIR.csv" ] || exit_error "$1/${DIFF_DIR}.csv" "$NOT_EXIST"
-
-  cut -wf2 "$1/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
-  | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$CHECK_EXEC" % "$1/packages" \
-  | xargs -n1 echo
-}
-
 # Pull diffs to private network command handler
 pull_repo_handler() {
   if [ "$MODE" != "PRIVATE" ] ; then 
@@ -886,7 +886,7 @@ pull_repo_handler() {
 
         for diff in $last_diffs ; do
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
-          check_diff_dir "$pull_dir"
+          check_diff_dir "$pull_dir" | cut -d";" -f1,3 
           copy_service_files "$pull_dir" "$repo_branch_dir"
           cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
 
