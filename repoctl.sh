@@ -268,7 +268,7 @@ check_status() {
 
 # pipe progress
 create_progress() {
-  >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  touch "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 remove_progress() {
@@ -885,6 +885,7 @@ pull_repo_handler() {
 
         for diff in $last_diffs ; do
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
+	  check_diff_dir "$pull_dir"
           copy_service_files "$pull_dir" "$repo_branch_dir"
           cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
 
