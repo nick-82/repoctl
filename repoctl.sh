@@ -268,7 +268,7 @@ check_status() {
 
 # pipe progress
 create_progress() {
-  touch "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  echo "0/$1" >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 remove_progress() {
@@ -276,7 +276,7 @@ remove_progress() {
 }
 
 push_progress() {
-  echo "$1" >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  echo "$1/$2" >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 show_progress() {
@@ -563,8 +563,10 @@ EOF
 )
 
 PROGRESS_EXEC=$(cat <<-'EOF'
-  echo "$0" >>"$1" 
-  echo "success;progress;$0/$1"
+  current=$(tail -n1 "$0" | cut -d/ -f1)
+  current=$(( current + 1 ))
+  echo "$current/$1" >>"$0"
+  echo "success;progress;$current/$1"
 EOF
 )
 
@@ -598,7 +600,6 @@ update_repo_branch() {
 
   # TODO add logging
   max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
-  count_packages=0
   create_progress
   #exec 3<>"$TEMP_DIR/progress"
 
@@ -606,8 +607,7 @@ update_repo_branch() {
   cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$FETCH_EXEC" % "$REMOTE_REPOS_URL/$1" "$REPOS_DIR/$1" \
   | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" \
-  | xargs -n1 -I% echo $(( count_packages=$count_packages + 1 )) \
-  | xargs -n1 -I% sh -c "$PROGRESS_EXEC" "%/$max_packages" "$TEMP_DIR/${SCRIPT_NAME%.*}.progress" 
+  | xargs -n1 -I% sh -c "$PROGRESS_EXEC" "$TEMP_DIR/${SCRIPT_NAME%.*}.progress" "$max_packages" >/dev/null
   #| xargs -n1 echo >/dev/null
 
   #cat "$TEMP_DIR/progress"
@@ -844,7 +844,7 @@ push_repo_handler() {
 
           cut -wf2 "$repo_branch_dir/$DIFFS_DIR/$DIFF_DIR.$dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$COPY_EXEC" % "$repo_branch_dir" "$push_dir/packages" \
-          | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+          | xargs -n1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
           echo "${dir##*/diff.}" >>"$repo_branch_dir/$DIFFS_DIR/$DIFFS_DIR.init"
         done
       fi
@@ -886,17 +886,22 @@ pull_repo_handler() {
 
         for diff in $last_diffs ; do
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
-          check_diff_dir "$pull_dir" | cut -d";" -f1,3 
+          fail_packages=$(check_diff_dir "$pull_dir" | awk -F";" 'BEGIN {OFS=";"} {if($1~"fail") print $0}')
+          if [ "$(echo "$fail_packages" | wc -l)" -gt 0 ] ; then
+            echo "$fail_packages" \
+            | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
+            exit_error "$fail_packages" "$NOT_EXIST"
+          fi
           copy_service_files "$pull_dir" "$repo_branch_dir"
           cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
 
           cut -wf2 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$COPY_EXEC" %  "$pull_dir/packages" "$repo_branch_dir" \
-          | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+          | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
 
           cut -wf1 "$pull_dir/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
           | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$REMOVE_EXEC" % "$repo_branch_dir" \
-          | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)"
+          | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
 
           echo "$diff" >>"$repo_branch_dir/$DIFFS_DIR/$DIFFS_DIR.init"
           rm -rf "$pull_dir"
