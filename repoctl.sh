@@ -683,7 +683,7 @@ parse_options() {
   # Set fetch threads
   [ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
 
-  # Debug mode on
+  # TODO Debug mode on
   #[ "$DEBUG" = "true" ] && set -x
 
 }
