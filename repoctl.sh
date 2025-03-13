@@ -684,7 +684,7 @@ parse_options() {
   [ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
 
   # Debug mode on
-  [ "$DEBUG" = "true" ] && set -x
+  #[ "$DEBUG" = "true" ] && set -x
 
 }
 ##########################################/PARSE OPTIONS#########################################
@@ -915,7 +915,6 @@ pull_repo_handler() {
     info "Only PRIVATE mode"
     usage "pull" 
   fi
-
 
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
