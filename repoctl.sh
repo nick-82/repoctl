@@ -694,6 +694,7 @@ parse_options() {
 # Init local repository command handler
 init_repo_handler() {
   parse_options "$@"
+
   [ -z "$REPO_VERSION" ] && exit_error "$MSG_REPO_VERSION_IS_EMPTY" "$IS_EMPTY"
   [ -z "$REPO_ARCH" ] && exit_error "$MSG_REPO_ARCH_IS_EMPTY" "$IS_EMPTY"
 
@@ -711,6 +712,7 @@ init_repo_handler() {
 # Remove local repository command handler
 remove_repo_handler() {
   parse_options "$@"
+
   [ -z "$REPO_VERSION" ] && exit_error "$MSG_REPO_VERSION_IS_EMPTY" "$IS_EMPTY"
   [ -z "$REPO_ARCH" ] && exit_error "$MSG_REPO_ARCH_IS_EMPTY" "$IS_EMPTY"
 
@@ -733,12 +735,13 @@ info_repo_handler() {
 
 # Info remote repository command handler
 remote_info_repo_handler() {
+  parse_options "$@"
+
   if [ "$MODE" != "PUBLIC" ] ; then 
     info "Only PUBLIC mode"
     usage "remote-info" 
   fi
 
-  parse_options "$@"
   #shift $(("${OPTIND}"))
   printf "Info remote repo FreeBSD:%s:%s\n" "$REPO_VERSION" "$REPO_ARCH"
   repo_remote_branch_list "$REPO_VERSION" "$REPO_ARCH" \
@@ -754,12 +757,12 @@ list_repo_handler() {
 
 # List remote repos command handler
 remote_list_repo_handler() {
+  parse_options "$@"
+
   if [ "$MODE" != "PUBLIC" ] ; then 
     info "Only PUBLIC mode"
     usage "remote-list" 
   fi
-
-  parse_options "$@"
 
   repo_remote_list \
   | cut -wf2 \
@@ -770,6 +773,7 @@ remote_list_repo_handler() {
 # Check local repository command handler
 check_repo_handler() {
   parse_options "$@"
+
   printf "check handler\n"
   shift $(("${OPTIND}"))
   #printf "params %s\n" "$@"
@@ -778,6 +782,7 @@ check_repo_handler() {
 # Check diffs between local and remote repos command handler
 remote_check_repo_handler() {
   parse_options "$@"
+
   printf "remote check handler\n"
   printf "params %s\n" "$@"
 }
@@ -785,18 +790,19 @@ remote_check_repo_handler() {
 # Status script command handler
 status_handler() {
   parse_options "$@"
+
   get_process | awk 'BEGIN {print "PID","COMMAND"} {print}' 
   show_progress
 }
 
 # Update local repository command handler
 update_repo_handler() {
+  parse_options "$@"
+
   if [ "$MODE" != "PUBLIC" ] ; then 
     info "Only PUBLIC mode"
     usage "update" 
   fi
-
-  parse_options "$@"
 
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
@@ -849,12 +855,12 @@ check_diff_dir() {
 
 # Push diffs from local repository to private network command handler
 push_repo_handler() {
+  parse_options "$@"
+
   if [ "$MODE" != "PUBLIC" ] ; then 
     info "Only PUBLIC mode"
     usage "push" 
   fi
-
-  parse_options "$@"
 
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
@@ -903,12 +909,13 @@ push_repo_handler() {
 
 # Pull diffs to private network command handler
 pull_repo_handler() {
+  parse_options "$@"
+
   if [ "$MODE" != "PRIVATE" ] ; then 
     info "Only PRIVATE mode"
     usage "pull" 
   fi
 
-  parse_options "$@"
 
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
