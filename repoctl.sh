@@ -644,12 +644,13 @@ parse_options() {
   #[ "$#" -eq "0" ] && usage "$1"
   COMMAND="$1" && shift
   OPTIND=1
-  while getopts :V:A:B:n:fhsa OPT; do
+  while getopts :V:A:B:n:c:fhsa OPT; do
     case "$OPT" in
       h) usage "$COMMAND" ;;
       s) SILENT=true ;; 
       a) CHOICE=ALL ;; 
       f) FORCE=true ;; 
+      c) CONF="$OPTARG" ;; 
       n) case "$COMMAND" in
           'push'|'pull') COUNT="${OPTARG:-1}" ;;
           *) exit_error "unknown option -$OPT for command $COMMAND" "$UNKNOWN_OPTION" ;;
