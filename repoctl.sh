@@ -650,7 +650,7 @@ parse_options() {
       s) SILENT=true ;; 
       a) CHOICE=ALL ;; 
       f) FORCE=true ;; 
-      c) CONF="$OPTARG" && load_conf ;; 
+      c) CONF="$OPTARG" ;; 
       n) case "$COMMAND" in
           'push'|'pull') COUNT="${OPTARG:-1}" ;;
           *) exit_error "unknown option -$OPT for command $COMMAND" "$UNKNOWN_OPTION" ;;
@@ -674,6 +674,18 @@ parse_options() {
       \?) exit_error "unknown option -$OPT" "$UNKNOWN_OPTION" ;;
     esac
   done
+
+  load_conf
+  check_repos_path
+  [ "$MODE" = "PUBLIC" ] && check_push_diffs_path
+  [ "$MODE" = "PRIVATE" ] && check_pull_diffs_path
+
+  # Set fetch threads
+  [ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
+
+  # Debug mode on
+  [ "$DEBUG" = "true" ] && set -x
+
 }
 ##########################################/PARSE OPTIONS#########################################
 
@@ -974,17 +986,6 @@ stop_handler() {
 
 ##########################################ENRTY POINT################################################
 main() {
-  load_conf
-  check_repos_path
-  [ "$MODE" = "PUBLIC" ] && check_push_diffs_path
-  [ "$MODE" = "PRIVATE" ] && check_pull_diffs_path
-
-  # Set fetch threads
-  [ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
-
-  # Debug mode on
-  [ "$DEBUG" = "true" ] && set -x
-
   case "$1" in
     ''|'-h') usage 'main' ;;
     '-v') printf "%s version %s\n" "${SCRIPT_NAME%.*}" "$VERSION" && exit "$SUCCESS" ;;
@@ -1004,14 +1005,6 @@ main() {
     'stop') stop_handler "$@" ;;
     *) printf "Unknown command %s\n" "$1" && usage 'main' ;;
   esac
-
-  # create tempfile
-  #mktemp
-
-  # Debug mode off
-  [ "$DEBUG" = "true" ] && set +x
-
-  handle_exit 
 }
 
 #set -o nounset
@@ -1023,5 +1016,7 @@ check_utility date getopts tar fetch mkdir comm logger tee printf awk sed tail h
 trap handle_exit HUP INT QUIT ABRT TERM
 
 main "$@"
+
+handle_exit 
 
 exit "$SUCCESS"
