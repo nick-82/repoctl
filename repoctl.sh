@@ -973,52 +973,55 @@ stop_handler() {
 ##########################################/COMMAND HANDLERS##########################################
 
 ##########################################ENRTY POINT################################################
+main() {
+  load_conf
+  check_repos_path
+  [ "$MODE" = "PUBLIC" ] && check_push_diffs_path
+  [ "$MODE" = "PRIVATE" ] && check_pull_diffs_path
+
+  # Set fetch threads
+  [ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
+
+  # Debug mode on
+  [ "$DEBUG" = "true" ] && set -x
+
+  case "$1" in
+    ''|'-h') usage 'main' ;;
+    '-v') printf "%s version %s\n" "${SCRIPT_NAME%.*}" "$VERSION" && exit "$SUCCESS" ;;
+    'init') init_repo_handler "$@" ;;
+    'remove') remove_repo_handler "$@" ;;
+    'info') info_repo_handler "$@";;
+    'remote-info') remote_info_repo_handler "$@";;
+    'check') check_repo_handler "$@" ;;
+    'list') list_repo_handler "$@" ;;
+    'remote-list') remote_list_repo_handler "$@" ;;
+    'remote-check') remote_check_repo_handler "$@" ;;
+    'status') status_handler "$@" ;;
+    'update') update_repo_handler "$@" ;;
+    'push') push_repo_handler "$@" ;;
+    'pull') pull_repo_handler "$@" ;;
+    'log') log_repo_handler "$@" ;;
+    'stop') stop_handler "$@" ;;
+    *) printf "Unknown command %s\n" "$1" && usage 'main' ;;
+  esac
+
+  # create tempfile
+  #mktemp
+
+  # Debug mode off
+  [ "$DEBUG" = "true" ] && set +x
+
+  handle_exit 
+}
 
 #set -o nounset
 set -o errexit
 (set -o pipefail 2>/dev/null) && set -o pipefail
-
 check_utility date getopts tar fetch mkdir comm logger tee printf awk sed tail head rm sort xargs pgrep cut trap nproc
-load_conf
-check_repos_path
-[ "$MODE" = "PUBLIC" ] && check_push_diffs_path
-[ "$MODE" = "PRIVATE" ] && check_pull_diffs_path
-
-# Set fetch threads
-[ "$MAX_THREADS" = "ALL" ] && THREADS="$(nproc)" || THREADS="$MAX_THREADS"
 
 # Handle exit
 trap handle_exit HUP INT QUIT ABRT TERM
 
-# Debug mode on
-[ "$DEBUG" = "true" ] && set -x
-
-case "$1" in
-  ''|'-h') usage 'main' ;;
-  '-v') printf "%s version %s\n" "${SCRIPT_NAME%.*}" "$VERSION" && exit "$SUCCESS" ;;
-  'init') init_repo_handler "$@" ;;
-  'remove') remove_repo_handler "$@" ;;
-  'info') info_repo_handler "$@";;
-  'remote-info') remote_info_repo_handler "$@";;
-  'check') check_repo_handler "$@" ;;
-  'list') list_repo_handler "$@" ;;
-  'remote-list') remote_list_repo_handler "$@" ;;
-  'remote-check') remote_check_repo_handler "$@" ;;
-  'status') status_handler "$@" ;;
-  'update') update_repo_handler "$@" ;;
-  'push') push_repo_handler "$@" ;;
-  'pull') pull_repo_handler "$@" ;;
-  'log') log_repo_handler "$@" ;;
-  'stop') stop_handler "$@" ;;
-  *) printf "Unknown command %s\n" "$1" && usage 'main' ;;
-esac
-
-# create tempfile
-#mktemp
-
-# Debug mode off
-[ "$DEBUG" = "true" ] && set +x
-
-handle_exit 
+main "$@"
 
 exit "$SUCCESS"
