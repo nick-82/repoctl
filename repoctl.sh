@@ -251,7 +251,6 @@ get_pid() {
   check_pid && cat "$PID_DIR/$SCRIPT_NAME.pid"
 }
 
-# $1 - execute command
 create_pid() {
   echo "$$" >"$PID_DIR/$SCRIPT_NAME.pid" || return "$ERROR_CREATE_PID"
 }
@@ -272,7 +271,9 @@ create_progress() {
 }
 
 remove_progress() {
-  [ -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress" ] && rm -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  if [ -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress" ] ; then 
+    rm -f "$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  fi
 }
 
 push_progress() {
@@ -787,6 +788,12 @@ update_repo_handler() {
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
 
+  if check_pid ; then
+    exit_error "Many exec processes, PID file found" "$MANY_EXEC_PROCESSES"
+  fi
+
+  create_pid
+
   if [ -n "${REPO_BRANCHES}" ] ; then 
     branches="$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')"
 
@@ -812,6 +819,8 @@ update_repo_handler() {
       fi
     done
   fi
+
+  remove_pid
 }
 
 # $1 - path to (push/pull) diff dir
@@ -836,6 +845,12 @@ push_repo_handler() {
 
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
+
+  if check_pid ; then
+    exit_error "Many exec processes, PID file found" "$MANY_EXEC_PROCESSES"
+  fi
+
+  create_pid
 
   if [ -n "${REPO_BRANCHES}" ] ; then 
     branches="$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')"
@@ -869,6 +884,8 @@ push_repo_handler() {
       fi
     done
   fi
+
+  remove_pid
 }
 
 # Pull diffs to private network command handler
@@ -882,6 +899,13 @@ pull_repo_handler() {
 
   [ -z "${REPO_VERSION}" ] && exit_error "repo version is empty" "$IS_EMPTY"
   [ -z "${REPO_ARCH}" ] && exit_error "repo arch is empty" "$IS_EMPTY"
+
+  if check_pid ; then
+    exit_error "Many exec processes, PID file found" "$MANY_EXEC_PROCESSES"
+  fi
+
+  create_pid
+
 
   if [ -n "${REPO_BRANCHES}" ] ; then 
     branches="$(strip_str "$REPO_BRANCHES" | awk -F, '{$1=$1;print}')"
@@ -928,6 +952,8 @@ pull_repo_handler() {
       fi
     done
   fi
+
+  remove_pid
 }
 
 # History updates local repository
