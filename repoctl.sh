@@ -276,7 +276,7 @@ remove_progress() {
 }
 
 push_progress() {
-  echo "$1/$2" >>"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  echo "$1/$2" >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 show_progress() {
@@ -565,10 +565,21 @@ EOF
 PROGRESS_EXEC=$(cat <<-'EOF'
   current=$(tail -n1 "$0" | cut -d/ -f1)
   current=$(( current + 1 ))
-  echo "$current/$1" >>"$0"
+  echo "$current/$1" >"$0"
   echo "success;progress;$current/$1"
 EOF
 )
+
+# $1 - path to repo branch
+# $2 - path to repo diff file
+check_repo_diff() {
+  [ -d "$1" ] || exit_error "$1 not exist" "$NOT_EXIST"
+  [ -f "$2" ] || exit_error "CSV file $2" "$NOT_EXIST"
+
+  cut -wf2 "$2" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
+  | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$CHECK_EXEC" % "$1" \
+  | xargs -n1 echo
+}
 
 # Update repo branch
 # $1 - repo name + branch
@@ -599,7 +610,7 @@ update_repo_branch() {
   # echo $(( $(tail -n1 tst) - 1 )) >>tst
 
   # TODO add logging
-  max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
+  max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l | sed 's/[[:blank:]]*//g')"
   create_progress "$max_packages"
   #exec 3<>"$TEMP_DIR/progress"
 
@@ -612,9 +623,17 @@ update_repo_branch() {
 
   #cat "$TEMP_DIR/progress"
   #exec 3>&-
-  #remove_progress
+  remove_progress
 
   copy_service_files "$3" "$REPOS_DIR/$1"
+
+  fail_load_packages=$(check_repo_diff "$REPOS_DIR/$1" "$3/$DIFF_DIR.csv" | awk -F";" 'BEGIN {OFS=";"} {if($1~"fail") print $0}')
+  if [ "$(echo "$fail_load_packages" | sed '/^[[:space:]]*$/d' | wc -l)" -gt 0 ] ; then
+    echo "$fail_load_packages" \
+    | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
+    rm -rf "$3"
+    exit_error "packages not load $fail_load_packages" "$NOT_EXIST"
+  fi
 }
 
 ##########################################/SERVICE FUNCTIONS###########################
@@ -799,7 +818,7 @@ update_repo_handler() {
 check_diff_dir() {
   [ -d "$1" ] || exit_error "$1 not exist" "$NOT_EXIST"
   checked_diff_dir="$(echo "$1" | awk -F/ '{print $NF}' | awk -F: '{print $NF}')"
-  [ -f "$1/$DIFF_DIR.csv" ] || exit_error "$1/${DIFF_DIR}.csv" "$NOT_EXIST"
+  [ -f "$1/$DIFF_DIR.csv" ] || exit_error "CSV file $1/${DIFF_DIR}.csv" "$NOT_EXIST"
 
   cut -wf2 "$1/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | cut -d';' -f3 \
   | xargs -n1 -P"$THREADS" -S2048 -I% sh -c "$CHECK_EXEC" % "$1/packages" \
@@ -887,10 +906,10 @@ pull_repo_handler() {
         for diff in $last_diffs ; do
           pull_dir="$PULL_DIFFS_DIR/FreeBSD:$REPO_VERSION:$REPO_ARCH:$branch:$diff"
           fail_packages=$(check_diff_dir "$pull_dir" | awk -F";" 'BEGIN {OFS=";"} {if($1~"fail") print $0}')
-          if [ "$(echo "$fail_packages" | wc -l)" -gt 0 ] ; then
+          if [ "$(echo "$fail_packages" | sed '/^[[:space:]]*$/d' | wc -l)" -gt 0 ] ; then
             echo "$fail_packages" \
             | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
-            exit_error "$fail_packages" "$NOT_EXIST"
+            exit_error "packages $fail_packages" "$NOT_EXIST"
           fi
           copy_service_files "$pull_dir" "$repo_branch_dir"
           cp -fp "$pull_dir/diff.csv" "$repo_branch_dir/$DIFFS_DIR/.diff.$diff.csv"
