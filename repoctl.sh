@@ -650,7 +650,7 @@ parse_options() {
       s) SILENT=true ;; 
       a) CHOICE=ALL ;; 
       f) FORCE=true ;; 
-      c) CONF="$OPTARG" ;; 
+      c) CONF="$OPTARG" && load_conf ;; 
       n) case "$COMMAND" in
           'push'|'pull') COUNT="${OPTARG:-1}" ;;
           *) exit_error "unknown option -$OPT for command $COMMAND" "$UNKNOWN_OPTION" ;;
