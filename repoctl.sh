@@ -276,7 +276,7 @@ remove_progress() {
 }
 
 push_progress() {
-  echo "$1/$2" >"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
+  echo "$1/$2" >>"$TEMP_DIR/${SCRIPT_NAME%.*}.progress"
 }
 
 show_progress() {
@@ -292,7 +292,7 @@ check_utility() {
 }
 
 handle_exit() {
-  remove_progress
+  #remove_progress
   remove_pid
 }
 
@@ -600,7 +600,7 @@ update_repo_branch() {
 
   # TODO add logging
   max_packages="$(cut -wf2 "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l)"
-  create_progress
+  create_progress "$max_packages"
   #exec 3<>"$TEMP_DIR/progress"
 
   # TODO fix counter functional
