@@ -515,7 +515,7 @@ copy_service_files() {
 FETCH_EXEC=$(cat <<-'EOF'
   local_path="$(echo "$0" | awk 'BEGIN {FS="/";OFS="/"} {NF--;print}')"
   [ -d "$2/$local_path" ] || mkdir -p "$2/$local_path"
-  fetch -aqr "$1/$0" -o "$2/$0" 2>/dev/null && echo "success;fetch;$1/$0;to;$2/" || echo "fail;fetch;$1/$0;to;$2/"
+  fetch -aqm "$1/$0" -o "$2/$0" 2>/dev/null && echo "success;fetch;$1/$0;to;$2/" || echo "fail;fetch;$1/$0;to;$2/"
 EOF
 )
 
