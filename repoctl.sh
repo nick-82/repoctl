@@ -626,15 +626,23 @@ update_repo_branch() {
   #exec 3>&-
   remove_progress
 
-  copy_service_files "$3" "$REPOS_DIR/$1"
+  count_diff_packages="$(cat "$3/$DIFF_DIR.csv" | sed '/^[[:space:]]*$/d' | wc -l | sed 's/[[:blank:]]*//g')"
+  if [ "$count_diff_packages" -eq 0 ] ; then
+    rm -rf "$3"
+    remove_pid
+    exit_success "empty diff"
+  fi
 
   fail_load_packages=$(check_repo_diff "$REPOS_DIR/$1" "$3/$DIFF_DIR.csv" | awk -F";" 'BEGIN {OFS=";"} {if($1~"fail") print $0}')
   if [ "$(echo "$fail_load_packages" | sed '/^[[:space:]]*$/d' | wc -l)" -gt 0 ] ; then
     echo "$fail_load_packages" \
     | xargs -n1 -P1 -S2048 -I% sh -c "$LOG_EXEC" % "$PRIORITY_INFO" "${SCRIPT_NAME%.*}" "$SYSLOG" "$FILELOG" "$FILELOG_DIR" "$(timestamp)" >/dev/null
     rm -rf "$3"
+    remove_pid
     exit_error "packages not load $fail_load_packages" "$NOT_EXIST"
   fi
+
+  copy_service_files "$3" "$REPOS_DIR/$1"
 }
 
 ##########################################/SERVICE FUNCTIONS###########################
